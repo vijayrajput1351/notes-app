@@ -1,0 +1,285 @@
+# ═══════════════════════════════════════════════════════
+# 1. NODE.JS APP DEPLOYMENT
+# ═══════════════════════════════════════════════════════
+# Kya hai: Notes App ka manager — 4 Pods chalata hai
+# Use:     App ko deploy karo, MongoDB se connect karo
+# Command: kubectl get deployment -n notes-app
+#          kubectl rollout restart deployment/node-deployment -n notes-app
+# ═══════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: notes-app
+  name: node-deployment
+  labels:
+    app: node              # Deployment ka label
+spec:
+  replicas: 4              # Hamesha 4 Pods chalte rahein
+  selector:
+    matchLabels:
+      app: node            # Inhe Pods manage karo
+  template:
+    metadata:
+      labels:
+        app: node          # Pod ka label — Service se match karna zaruri
+    spec:
+      containers:
+      - name: node
+        image: notes-app:v1        # Docker image — minikube mein honi chahiye
+        ports:
+        - containerPort: 3000      # App port 3000 pe sun rahi hai
+        resources:
+          requests:
+            cpu: "100m"            # Minimum 0.1 CPU (HPA ke liye zaruri!)
+            memory: "64Mi"         # Minimum 64MB RAM
+          limits:
+            cpu: "200m"            # Maximum 0.2 CPU
+            memory: "128Mi"        # Maximum 128MB RAM
+        env:
+        - name: MONGO_URI          # MongoDB connection string
+          value: 'mongodb://admin:mypassword@mongo-service:27017/notesdb?authSource=admin'
+          # admin     = username (Secret se aata hai MongoDB mein)
+          # mypassword = password
+          # mongo-service = MongoDB Service ka naam
+          # notesdb   = database naam
+          # authSource=admin = authentication database
+
+---
+# ═══════════════════════════════════════════════════════
+# 2. MONGODB DEPLOYMENT
+# ═══════════════════════════════════════════════════════
+# Kya hai: Database — notes yahan save hote hain
+# Use:     Sirf 1 replica — database kabhi zyada nahi hota!
+# Command: kubectl get pods -n notes-app -l app=mongo
+#          kubectl logs -n notes-app -l app=mongo
+# Note:    PVC se connected — Pod restart hone par data safe!
+# ═══════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: notes-app
+  name: mongodb-deployment
+  labels:
+    app: mongo
+spec:
+  replicas: 1              # Database hamesha 1 replica — data corrupt hoga zyada se!
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo         # Service ka selector isse match karta hai
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7     # Official MongoDB image
+        ports:
+        - containerPort: 27017    # MongoDB ka default port
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME    # MongoDB admin username
+          valueFrom:
+            secretKeyRef:
+              name: my-secret    # Secret ka naam
+              key: DB_USERNAME   # Secret ki key
+        - name: MONGO_INITDB_ROOT_PASSWORD    # MongoDB admin password
+          valueFrom:
+            secretKeyRef:
+              name: my-secret
+              key: DB_PASSWORD
+        volumeMounts:
+        - name: mongo-storage
+          mountPath: /data/db    # MongoDB data yahan save karta hai (default path)
+                                 # Ye container ke andar ka path hai — PC ka nahi!
+      volumes:
+      - name: mongo-storage      # volumeMounts ke naam se match karo
+        persistentVolumeClaim:
+          claimName: notes-pvc   # PVC ka naam — storage yahan se milegi
+
+---
+# ═══════════════════════════════════════════════════════
+# 3. NOTES APP SERVICE
+# ═══════════════════════════════════════════════════════
+# Kya hai: Notes App tak traffic pahunchata hai
+# Use:     Browser se app access karo
+# Command: kubectl get service -n notes-app
+#          minikube service notes-service -n notes-app
+# Ports:   80 → Service ka port (Ingress yahan aata hai)
+#          3000 → Pod ka port (app yahan sune)
+#          30002 → Node pe directly access karo
+# ═══════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: notes-app
+  name: notes-service
+spec:
+  type: NodePort             # Bahar se access karne ke liye
+  selector:
+    app: node                # node-deployment ke Pods ko traffic bhejo
+  ports:
+  - protocol: TCP
+    port: 80                 # Service ka port
+    targetPort: 3000         # Pod ka port
+    nodePort: 30002          # Node pe ye port milega
+
+---
+# ═══════════════════════════════════════════════════════
+# 4. MONGODB SERVICE
+# ═══════════════════════════════════════════════════════
+# Kya hai: MongoDB Pod tak traffic pahunchata hai
+# Use:     Notes App is service se MongoDB se baat karta hai
+# Command: kubectl get service mongo-service -n notes-app
+# Note:    ClusterIP type — sirf cluster ke andar accessible
+#          Bahar se koi direct access nahi kar sakta!
+# ═══════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: notes-app
+  name: mongo-service        # Notes App MONGO_URI mein ye naam use karta hai
+spec:
+  selector:
+    app: mongo               # mongodb-deployment ke Pods ko traffic bhejo
+  ports:
+  - protocol: TCP
+    port: 27017              # MongoDB ka default port
+    targetPort: 27017
+
+---
+# ═══════════════════════════════════════════════════════
+# 5. PERSISTENT VOLUME
+# ═══════════════════════════════════════════════════════
+# Kya hai: Actual storage — jaise hard disk
+# Use:     MongoDB ka data permanently save karo
+# Command: kubectl get pv
+# Note:    Namespace nahi hota PV mein — cluster level pe hota hai!
+#          STATUS Bound = kisi PVC ne le liya ✅
+#          STATUS Available = koi use nahi kar raha
+# ═══════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: notes-pv             # PV ka naam — namespace nahi hota!
+  labels:
+    type: local
+spec:
+  storageClassName: standard  # Minikube ka default storageClass
+  capacity:
+    storage: 1Gi              # 1GB storage
+  accessModes:
+  - ReadWriteOnce             # Ek hi Node read/write kar sake
+  hostPath:
+    path: "/data/notes-mongodb"  # Minikube ke andar ka path
+
+---
+# ═══════════════════════════════════════════════════════
+# 6. PERSISTENT VOLUME CLAIM
+# ═══════════════════════════════════════════════════════
+# Kya hai: Storage ki request — "mujhe 1GB chahiye"
+# Use:     MongoDB Deployment yahi use karta hai
+# Command: kubectl get pvc -n notes-app
+# Note:    STATUS Bound = PV mil gaya, data save ho raha hai ✅
+#          STATUS Pending = PV nahi mila ❌
+# ═══════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: notes-app
+  name: notes-pvc            # MongoDB Deployment mein yahi naam use hoga
+spec:
+  accessModes:
+  - ReadWriteOnce            # PV se match karna chahiye
+  resources:
+    requests:
+      storage: 1Gi           # Itni storage chahiye
+  storageClassName: standard  # PV ke storageClassName se match karo
+
+---
+# ═══════════════════════════════════════════════════════
+# 7. SECRET
+# ═══════════════════════════════════════════════════════
+# Kya hai: Sensitive data — passwords safe rakhta hai
+# Use:     MongoDB username + password store karo
+# Command: kubectl get secret -n notes-app
+#          kubectl describe secret my-secret -n notes-app
+# Note:    Base64 encoded hota hai — encrypted nahi!
+#          Encode: echo -n "mypassword" | base64
+#          Decode: echo "bXlwYXNzd29yZA==" | base64 --decode
+#          Git mein kabhi mat daalo!
+# ═══════════════════════════════════════════════════════
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: notes-app
+  name: my-secret
+type: Opaque                  # Generic secret type
+data:
+  DB_PASSWORD: bXlwYXNzd29yZA==   # "mypassword" base64 mein
+  DB_USERNAME: YWRtaW4=           # "admin" base64 mein
+
+---
+# ═══════════════════════════════════════════════════════
+# 8. INGRESS
+# ═══════════════════════════════════════════════════════
+# Kya hai: Domain se app access karo
+# Use:     notes.local → notes-service → Pods
+# Command: kubectl get ingress -n notes-app
+# Setup:   sudo minikube tunnel (terminal band mat karo!)
+#          /etc/hosts mein: 127.0.0.1 notes.local
+# Note:    Ingress Controller pehle enable karo:
+#          minikube addons enable ingress
+# ═══════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: notes-ingress
+  namespace: notes-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: notes.local        # Is domain pe aao
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: notes-service   # Is Service ko traffic bhejo
+            port:
+              number: 80          # Service ka port
+
+---
+# ═══════════════════════════════════════════════════════
+# 9. HPA — HORIZONTAL POD AUTOSCALER
+# ═══════════════════════════════════════════════════════
+# Kya hai: CPU dekh ke automatically Pods badhata/ghataata hai
+# Use:     Load zyada = Pods badhao, load kam = Pods ghataao
+# Command: kubectl get hpa -n notes-app -w
+# Setup:   minikube addons enable metrics-server (zaruri!)
+#          Resources requests defined honi chahiye Deployment mein
+# Note:    Replicas vs HPA —
+#          Replicas = fixed (manual)
+#          HPA = automatic (CPU/memory ke hisaab se)
+# ═══════════════════════════════════════════════════════
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa
+  namespace: notes-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: node-deployment    # Is Deployment ko scale karo
+  minReplicas: 1             # Kam se kam 1 Pod hamesha
+  maxReplicas: 10            # Zyada se zyada 10 Pods
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70   # CPU 70% ho toh naye Pods banao

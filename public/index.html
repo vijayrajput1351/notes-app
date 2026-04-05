@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Notes 📚</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f9ff;
+      min-height: 100vh;
+      padding: 32px 16px 60px;
+    }
+
+    .container { max-width: 700px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      border-radius: 20px;
+      padding: 28px;
+      color: #fff;
+      margin-bottom: 24px;
+    }
+    .header h1 { font-size: 26px; font-weight: 700; }
+    .header p  { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+    .stats { display: flex; gap: 12px; margin-top: 16px; }
+    .stat {
+      background: rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .stat span { font-size: 20px; display: block; }
+
+    /* DB Status */
+    .db-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.15);
+      padding: 4px 10px;
+      border-radius: 99px;
+    }
+    .db-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+    .db-dot.offline { background: #f87171; }
+
+    /* Form */
+    .form-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    .form-card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 14px;
+    }
+    .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .form-row input,
+    .form-row select,
+    textarea {
+      width: 100%;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #0ea5e9; }
+    textarea { resize: vertical; min-height: 80px; margin-bottom: 10px; }
+    .btn-save {
+      background: #0ea5e9;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+    }
+    .btn-save:hover  { background: #0284c7; }
+    .btn-save:active { transform: scale(0.98); }
+
+    /* Filter */
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      border: none;
+      background: #fff;
+      color: #64748b;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      transition: all 0.15s;
+    }
+    .filter-btn.active { background: #0ea5e9; color: #fff; }
+
+    /* Notes Grid */
+    .notes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 500px) { .notes-grid { grid-template-columns: 1fr; } }
+
+    .note-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      border-left: 4px solid #0ea5e9;
+      animation: fadeIn 0.3s ease;
+      position: relative;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .note-card.Math     { border-color: #8b5cf6; }
+    .note-card.Science  { border-color: #10b981; }
+    .note-card.History  { border-color: #f59e0b; }
+    .note-card.English  { border-color: #ef4444; }
+    .note-card.General  { border-color: #0ea5e9; }
+
+    .note-category {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #0ea5e9;
+      margin-bottom: 6px;
+    }
+    .note-card.Math     .note-category { color: #8b5cf6; }
+    .note-card.Science  .note-category { color: #10b981; }
+    .note-card.History  .note-category { color: #f59e0b; }
+    .note-card.English  .note-category { color: #ef4444; }
+
+    .note-title   { font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 6px; }
+    .note-content { font-size: 13px; color: #64748b; line-height: 1.6; }
+    .note-date    { font-size: 11px; color: #94a3b8; margin-top: 10px; }
+
+    .del-btn {
+      position: absolute;
+      top: 12px; right: 12px;
+      background: none; border: none;
+      color: #cbd5e1; font-size: 16px;
+      cursor: pointer; border-radius: 6px;
+      padding: 2px 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .del-btn:hover { color: #ef4444; background: #fee2e2; }
+
+    .empty {
+      grid-column: 1/-1;
+      text-align: center;
+      color: #94a3b8;
+      padding: 40px 0;
+      font-size: 15px;
+    }
+    .empty span { font-size: 40px; display: block; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>📚 Student Notes</h1>
+    <p>Apne notes save karo — kabhi delete nahi honge!</p>
+    <div class="stats">
+      <div class="stat"><span id="stat-total">0</span>Total</div>
+      <div class="stat"><span id="stat-today">0</span>Aaj ke</div>
+    </div>
+    <div class="db-status">
+      <div class="db-dot" id="db-dot"></div>
+      <span id="db-text">MongoDB connecting...</span>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="form-card">
+    <h2>✏️ Naya Note Likho</h2>
+    <div class="form-row">
+      <input id="note-title" type="text" placeholder="Title (jaise: Newton ke laws)" maxlength="100" />
+      <select id="note-category" style="max-width:140px">
+        <option>General</option>
+        <option>Math</option>
+        <option>Science</option>
+        <option>History</option>
+        <option>English</option>
+      </select>
+    </div>
+    <textarea id="note-content" placeholder="Yahan apna note likho..."></textarea>
+    <button class="btn-save" onclick="saveNote()">💾 Save Note</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('All', this)">Sab</button>
+    <button class="filter-btn" onclick="setFilter('General', this)">General</button>
+    <button class="filter-btn" onclick="setFilter('Math', this)">Math</button>
+    <button class="filter-btn" onclick="setFilter('Science', this)">Science</button>
+    <button class="filter-btn" onclick="setFilter('History', this)">History</button>
+    <button class="filter-btn" onclick="setFilter('English', this)">English</button>
+  </div>
+
+  <!-- Notes -->
+  <div class="notes-grid" id="notes-grid"></div>
+
+</div>
+
+<script>
+  let allNotes  = [];
+  let curFilter = 'All';
+
+  async function loadNotes() {
+    try {
+      const res  = await fetch('/api/notes');
+      const data = await res.json();
+      allNotes   = data.notes;
+      render();
+      updateStats();
+    } catch (err) {
+      console.error('Notes load nahi hue:', err);
+    }
+  }
+
+  async function saveNote() {
+    const title    = document.getElementById('note-title').value.trim();
+    const content  = document.getElementById('note-content').value.trim();
+    const category = document.getElementById('note-category').value;
+
+    if (!title || !content) {
+      alert('Title aur content dono bharo!');
+      return;
+    }
+
+    await fetch('/api/notes', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ title, content, category }),
+    });
+
+    document.getElementById('note-title').value   = '';
+    document.getElementById('note-content').value = '';
+    loadNotes();
+  }
+
+  async function deleteNote(id) {
+    await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+    loadNotes();
+  }
+
+  function setFilter(f, btn) {
+    curFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  }
+
+  function render() {
+    const grid = document.getElementById('notes-grid');
+    const visible = curFilter === 'All'
+      ? allNotes
+      : allNotes.filter(n => n.category === curFilter);
+
+    if (visible.length === 0) {
+      grid.innerHTML = `<div class="empty"><span>📭</span>Koi note nahi hai!</div>`;
+      return;
+    }
+
+    grid.innerHTML = visible.map(n => `
+      <div class="note-card ${n.category}">
+        <button class="del-btn" onclick="deleteNote('${n._id}')">✕</button>
+        <div class="note-category">${n.category}</div>
+        <div class="note-title">${esc(n.title)}</div>
+        <div class="note-content">${esc(n.content)}</div>
+        <div class="note-date">${new Date(n.createdAt).toLocaleDateString('hi-IN')}</div>
+      </div>
+    `).join('');
+  }
+
+  function updateStats() {
+    const today = new Date().toDateString();
+    const todayNotes = allNotes.filter(n =>
+      new Date(n.createdAt).toDateString() === today
+    ).length;
+    document.getElementById('stat-total').textContent = allNotes.length;
+    document.getElementById('stat-today').textContent = todayNotes;
+  }
+
+  function esc(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // DB status check
+  async function checkHealth() {
+    try {
+      const res  = await fetch('/health');
+      const data = await res.json();
+      const dot  = document.getElementById('db-dot');
+      const txt  = document.getElementById('db-text');
+      if (data.database === 'connected') {
+        dot.classList.remove('offline');
+        txt.textContent = 'MongoDB connected ✅';
+      } else {
+        dot.classList.add('offline');
+        txt.textContent = 'MongoDB disconnected ❌';
+      }
+    } catch {}
+  }
+
+  // Enter key
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') saveNote();
+  });
+
+  loadNotes();
+  checkHealth();
+  setInterval(checkHealth, 10000); // har 10s mein check karo
+</script>
+</body>
+</html>
